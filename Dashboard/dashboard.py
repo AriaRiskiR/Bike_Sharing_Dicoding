@@ -31,13 +31,33 @@ for col in category_columns:
 day_df = day_df.dropna(subset=["year"])  
 
 
+
+
 # Streamlit layout
 st.title("Dashboard Analisis Penyewaan Sepeda")
+st.sidebar.header("Filter")
 
+# Filter interaktif berdasarkan tanggal dan musim
+min_date, max_date = day_df["date"].min().date(), day_df["date"].max().date()
+selected_date = st.sidebar.slider(
+    "Pilih Rentang Tanggal:",
+    min_value=min_date,
+    max_value=max_date,
+    value=(min_date, max_date)
+)
+day_filter_df = day_df[
+    (day_df["date"] >= pd.to_datetime(selected_date[0])) & 
+    (day_df["date"] <= pd.to_datetime(selected_date[1]))
+]
+
+
+season_opts = ["All Seasons", *day_df["season"].unique()]
+selected_season = st.sidebar.selectbox("Pilih Musim:", season_opts)
+day_filter_df = day_filter_df if selected_season == "All Seasons" else day_filter_df[day_filter_df["season"] == selected_season]
 
 # Visualisasi: Total penyewaan sepeda berdasarkan musim dan tahun
 st.subheader("Total Penyewaan Sepeda Berdasarkan Musim per Tahun")
-seasonal_rentals = day_df.groupby(["year", "season"], observed=False)["total_user"].sum().reset_index()
+seasonal_rentals = day_filter_df.groupby(["year", "season"], observed=False)["total_user"].sum().reset_index()
 fig, ax = plt.subplots(figsize=(8, 5))
 sns.barplot(x="season", y="total_user", hue="year", data=seasonal_rentals, palette="viridis", ax=ax)
 ax.set_xlabel("Musim")
@@ -45,28 +65,28 @@ ax.set_ylabel("Total Penyewaan Sepeda")
 ax.set_title("Total Penyewaan Sepeda Berdasarkan Musim per Tahun")
 st.pyplot(fig)
 
-# Visualisasi: Tren Penyewaan Sepeda per Bulan
-st.subheader("Tren Penyewaan Sepeda per Bulan")
-monthly_trend = day_df.groupby(["year", "month"], observed=False)["total_user"].mean().reset_index()
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.lineplot(x="month", y="total_user", hue="year", data=monthly_trend, marker="o", palette="magma", ax=ax)
-ax.set_xlabel("Bulan")
+# Visualisasi: Pengaruh Cuaca terhadap Penyewaan Sepeda
+st.subheader("Pengaruh Cuaca terhadap Penyewaan Sepeda")
+weather_rentals = day_filter_df.groupby("weather")["total_user"].mean().reset_index()
+fig, ax = plt.subplots(figsize=(8, 5))
+sns.barplot(x="weather", y="total_user", data=weather_rentals, palette="coolwarm", ax=ax)
+ax.set_xlabel("Cuaca")
 ax.set_ylabel("Rata-rata Penyewaan Sepeda")
-ax.set_title("Tren Penyewaan Sepeda per Bulan")
+ax.set_title("Pengaruh Cuaca terhadap Penyewaan Sepeda")
 st.pyplot(fig)
 
 # Analisis RFM
 st.subheader("Analisis RFM (Recency, Frequency, Monetary)")
-def calculate_rfm(df):
-    recent_date = pd.Timestamp(df["date"].max())
-    rfm_df = df.groupby("date", as_index=False).agg(
+def calculate_rfm(day_df):
+    recent_date = pd.Timestamp(day_df["date"].max())
+    rfm_df = day_df.groupby("date", as_index=False).agg(
         frequency=("date", "count"),  # Seberapa sering penyewaan terjadi
         monetary=("total_user", "sum") # Total jumlah penyewaan sepeda per hari
     )
     rfm_df["recency"] = (recent_date - rfm_df["date"]).dt.days
     return rfm_df
 
-rfm_result = calculate_rfm(day_df)
+rfm_result = calculate_rfm(day_filter_df)
 st.dataframe(rfm_result.head())
 
 # Visualisasi RFM
@@ -97,3 +117,4 @@ ax[2].tick_params(axis='x', rotation=45, labelsize=12)
 
 plt.suptitle("Analisis RFM", fontsize=20)
 st.pyplot(fig)
+
